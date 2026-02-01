@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 from pybricks.pupdevices import DCMotor, Motor
-from pybricks.pupdevices import ColorDistanceSensor
+from pybricks.pupdevices import ColorSensor, ColorDistanceSensor
 from pybricks.pupdevices import Remote
 from pybricks.parameters import Port, Color, Button, Stop
 from pybricks.tools      import wait
@@ -110,12 +110,7 @@ def handle_sensor():
 	if sensor == None:
 		return
 
-	if sensor_type == "ColorDistanceSensor":
-		color=sensor.color()
-	else:
-		print("Sensor type", sensor_type, "not supported")
-		return
-
+	color=sensor.color()
 	if color == stop_color:
 		if motor_is_running():
 			print("We are running and I see", stop_color, "so I'm stopping")
@@ -228,6 +223,15 @@ def detect_peripherals():
 			pass
 
 		# Sensor Init
+		try:
+			sensor = ColorSensor(port)
+			sensor_port=port
+			sensor_type="ColorSensor"
+			print(port, ":", sensor_type)
+			continue
+		except OSError:
+			pass
+
 		try:
 			sensor = ColorDistanceSensor(port)
 			sensor_port=port

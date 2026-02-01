@@ -66,3 +66,6 @@ Supported peripherals:
 - ColorDistanceSensor
       6240610: LPF2 SENSOR 2X4X2, NO. 1
       https://brickset.com/parts/6240610
+- ColorSensor
+      6217705: SENSOR COLOUR, NO. 2
+      https://brickset.com/parts/6217705/sensor-colour-no-2
