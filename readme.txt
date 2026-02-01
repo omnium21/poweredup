@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 Train Controller
 
-This program controls a CityHub, TechnicHub or MoveHub (other hubs are untested).
+This program controls a CityHub, TechnicHub, MoveHub or PrimeHub (other hubs are untested).
 e.g. 6370369: HUB NO. 4
      https://brickset.com/parts/6370369/hub-no-4
      6142536: HUB, NO. 2
      https://brickset.com/parts/6142536/hub-no-2
      6283413: LPF2 HUB MOTOR 6X16X4 NO. 1
      https://brickset.com/parts/6283413/lpf2-hub-motor-6x16x4-no-1
+     6413266: HUB, NO. 13
+     https://brickset.com/parts/6413266/hub-no-13
 
 note: MoveHub does not support devices from the Motor() class.
 
@@ -56,6 +58,8 @@ Supported peripherals:
       https://brickset.com/parts/6342598/motor-no-2
       6347365: MOTOR, NO. 3
       https://brickset.com/parts/6347365/motor-no-3
+      6359216: MOTOR, NO. 13
+      https://brickset.com/parts/6359216/motor-no-13
 - "Train motor" that works with the DCMotor class, eg.
       6214559: MOTOR, NO. 4
       https://brickset.com/parts/6214559/motor-no-4

@@ -271,7 +271,7 @@ def detect_hub():
 		from pybricks.hubs       import InventorHub		# not tested
 		hub = InventorHub()
 	elif hub_type == "primehub":
-		from pybricks.hubs       import PrimeHub		# not tested
+		from pybricks.hubs       import PrimeHub
 		hub = PrimeHub()
 	elif hub_type == "essentialhub":
 		from pybricks.hubs       import EssentialHub	# not tested
