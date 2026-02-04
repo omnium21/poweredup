@@ -198,7 +198,6 @@ def detect_peripherals():
 				motor = Motor(port)
 				motor_type="Motor"
 				motor_port=port
-				angle = motor.angle
 				motor_max_speed, _, _ = motor.control.limits()
 				motor_multiplier=motor_max_speed/100
 				print(port, ":", motor_type,
