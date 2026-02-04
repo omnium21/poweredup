@@ -1,304 +1,322 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-from pybricks.pupdevices import DCMotor, Motor
-from pybricks.pupdevices import ColorSensor, ColorDistanceSensor
-from pybricks.pupdevices import Remote
-from pybricks.parameters import Port, Color, Button, Stop
-from pybricks.tools      import wait
-from pybricks            import version
+#!/usr/bin/env pybricks-micropython
 
-# Global Variables
-hub   = None
+# ============================================================================
+# Hub detection (must use version(); imports are hub-specific in Pybricks)
+# ============================================================================
+from pybricks import version
+from pybricks.tools import wait
+from pybricks.parameters import Button, Color, Direction, Port, Stop
+from pybricks.pupdevices import ColorDistanceSensor, DCMotor, Motor, Remote
+
+hub_type, *_ = version
+
+if hub_type == "primehub":
+    from pybricks.hubs import PrimeHub
+    HubClass = PrimeHub
+elif hub_type == "technichub":
+    from pybricks.hubs import TechnicHub
+    HubClass = TechnicHub
+elif hub_type == "cityhub":
+    from pybricks.hubs import CityHub
+    HubClass = CityHub
+elif hub_type == "essentialhub":
+    from pybricks.hubs import EssentialHub
+    HubClass = EssentialHub
+elif hub_type == "movehub":
+    from pybricks.hubs import MoveHub
+    HubClass = MoveHub
+else:
+    raise RuntimeError("Unsupported hub type: {}".format(hub_type))
+
+hub = HubClass()
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+SPEED_STEP_PERCENT = 10        # +/-10% per button press
+MAX_PERCENT = 100
+LOOP_MS = 20
+
+RED_SAMPLES_TO_STOP = 3
+NONRED_SAMPLES_TO_RESUME = 3
+
+HUB_BUTTON_DEBOUNCE_MS = 250
+
+# ============================================================================
+# Control state (meaningful system state)
+# ============================================================================
+
 motor = None
-sensor= None
+sensor = None
+remote = None
 
-motor_port  = None
-sensor_port = None
+requested_percent = 50         # target speed once started
+current_percent = None
 
-hub_type    = None
-motor_type  = None # Supported types: DCMotor, Motor
-sensor_type = None # Supported types: ColorDistanceSensor
+stopped_by_button = True       # do not run until first button press
+stopped_by_color = False
 
-ports = [Port.A, Port.B]
+motor_max_speed = None         # cached Motor.limits()[0], None for DCMotor
 
-stop_color        = Color.RED
-go_color          = Color.GREEN
-hold_color        = Color.YELLOW
-requested_speed   = 50
-current_speed     = 0
-stopped_by_button = True
-stopped_by_color  = False
-remote_timeout    = 5000
-motor_multiplier  = 1
-motor_max_speed   = 100
-debounce_delay    = 200
+# ============================================================================
+# Housekeeping state (mechanics, counters, debounce)
+# ============================================================================
 
-def set_motor_speed(speed):
-	global motor
-	global current_speed
-	global motor_multiplier
+motors = []
+sensors = []
 
-	if stopped_by_button or stopped_by_color:
-		return
+prev_hub_center_pressed = False
+debounce_deadline_ms = 0
+now_ms = 0
 
-	# Set the internal speed before checking for a motor
-	# This is so we can test the sensor and remote code without a motor
-	current_speed=speed
-	print("Setting current_speed = ", current_speed, "%")
+red_count = 0
+nonred_count = 0
 
-	if motor == None:
-		return
-
-	if motor_type == "Motor":
-		motor.run(speed*motor_multiplier)
-	elif motor_type == "DCMotor":
-		motor.dc(speed)
-	else:
-		print("Motor type", motor_type, "not supported")
-		return
-
-	all_lights(go_color)
-
-	if (speed * motor_multiplier) == motor_max_speed:
-		all_lights(Color.MAGENTA)
-	elif (speed * motor_multiplier) == (motor_max_speed * -1):
-		all_lights(Color.VIOLET)
-	else:
-		all_lights(go_color)
-
-	# Add a delay to prevent the motor from being changed too quickly
-	wait(debounce_delay)
-
-def motor_is_stopped():
-	if stopped_by_button == True or stopped_by_color == True:
-		return True
-	else:
-		return False
-
-def motor_is_running():
-	#if current_speed != 0:
-	if motor_is_stopped() == False:
-		return True
-	else:
-		return False
-
-def stop_button(source):
-	global stopped_by_button
-	global stopped_by_color
-
-	if motor_is_stopped():
-		print("We are not running and someone pressed the", source, "button, so I'll continue")
-		stopped_by_button=False
-		stopped_by_color=False
-		set_motor_speed(requested_speed)
-	else:
-		print("We are running and someone pressed the", source, "button, so I'll stop")
-		set_motor_speed(0)
-		stopped_by_button=True
-		all_lights(hold_color)
-
-def all_lights(color):
-	global remote
-
-	if remote != None:
-		remote.light.on(color)
-	hub.light.on(color)
-
-def handle_sensor():
-	global sensor
-	global stopped_by_color
-
-	if sensor == None:
-		return
-
-	color=sensor.color()
-	if color == stop_color:
-		if motor_is_running():
-			print("We are running and I see", stop_color, "so I'm stopping")
-			set_motor_speed(0)
-			stopped_by_color=True
-			all_lights(stop_color)
-	else:
-		if motor_is_stopped() and stopped_by_color == True:
-			print("We are stopped and I no longer see", stop_color, "so I'll continue")
-			stopped_by_color=False
-			set_motor_speed(requested_speed)
-			all_lights(go_color)
-
-def handle_buttons():
-	global remote
-	global requested_speed
-	global stopped_by_button
-
-	# Check if the hub's center button is pressed
-	if Button.CENTER in hub.buttons.pressed():
-		stop_button("hub")
-
-	if remote != None:
-		pressed = remote.buttons.pressed()
-		if Button.LEFT in pressed:
-			print("LEFT stop pressed")
-			stop_button("remote")
-			wait(debounce_delay)
-		elif Button.LEFT_PLUS in pressed:
-			print("LEFT PLUS pressed")
-			if motor_is_stopped() == True:
-				wait(debounce_delay)
-				return
-			requested_speed += 10
-			if requested_speed > 100:
-				requested_speed = 100
-			set_motor_speed(requested_speed)
-		elif Button.LEFT_MINUS in pressed:
-			print("LEFT MINUS pressed")
-			if motor_is_stopped() == True:
-				wait(debounce_delay)
-				return
-			requested_speed -= 10
-			if requested_speed < -100:
-				requested_speed = -100
-			set_motor_speed(requested_speed)
-		#else:
-			#print("No useful buttons pressed")
-
+# ============================================================================
+# Detection
+# ============================================================================
 
 def detect_peripherals():
-	global hub_type
-	global motor
-	global motor_type
-	global motor_port
-	global motor_multiplier
-	global sensor
-	global sensor_port
-	global sensor_type
-	global motor_max_speed
+    global motors, sensors, motor, sensor, motor_max_speed
 
-	# Start with the basic set of ports available on all hubs
-	if hub_type == "movehub":
-		# MoveHub doesn't like you scanning Port.A or B
-		ports = [Port.C, Port.D]
-	else:
-		ports = [Port.A, Port.B]
+    motors = []
+    sensors = []
 
-		# Add more ports if supported by the hub
-		try:
-			ports.append(Port.C)
-			ports.append(Port.D)
-			ports.append(Port.E)
-			ports.append(Port.F)
-		except AttributeError:
-			pass
+    # 1) Build a safe, hub-supported port list.
+    #    - Hard rule: never touch A/B on MoveHub (can crash).
+    #    - For everything else: probe with DCMotor and keep only ports that work.
+    if hub_type == "movehub":
+        candidate_ports = [Port.C, Port.D]
+    else:
+        candidate_ports = [Port.A, Port.B, Port.C, Port.D, Port.E, Port.F]
 
-	print("Available ports:", ports)
+    ports = []
+    for p in candidate_ports:
+        try:
+            probe = DCMotor(p, positive_direction=Direction.CLOCKWISE)
 
-	for port in ports:
-		# Maybe we have a regular Motor?
-		if hub_type != "movehub":
-			# MoveHub crashes when you connect a Motor
-			try:
-				motor = Motor(port)
-				motor_type="Motor"
-				motor_port=port
-				angle = motor.angle
-				motor_max_speed, _, _ = motor.control.limits()
-				motor_multiplier=motor_max_speed/100
-				print(port, ":", motor_type,
-					"max_speed=", motor_max_speed,
-					"multiplier=", motor_multiplier)
-				continue
-			except OSError:
-				pass
+            try:
+                probe.dc(0)  # minimal touch; should be harmless
+            except Exception:
+                pass
+            ports.append(p)
+        except Exception:
+            pass
 
-		# Maybe we have a DCMotor?
-		try:
-			motor = DCMotor(port)
-			motor_type="DCMotor"
-			motor_port=port
-			motor_max_speed=100
-			motor_multiplier=1
-			print(port, ":", motor_type,
-				"max_speed=", motor_max_speed,
-				"multiplier=", motor_multiplier)
-			continue
-		except OSError:
-			pass
+    # 2) Scan only the ports we just proved we can touch.
+    for p in ports:
+        # Avoid Motor() on MoveHub (known crash behavior)
+        if hub_type != "movehub":
+            try:
+                motors.append(Motor(p, positive_direction=Direction.CLOCKWISE))
+            except Exception:
+                pass
 
-		# Sensor Init
-		try:
-			sensor = ColorSensor(port)
-			sensor_port=port
-			sensor_type="ColorSensor"
-			print(port, ":", sensor_type)
-			continue
-		except OSError:
-			pass
+        try:
+            motors.append(DCMotor(p, positive_direction=Direction.CLOCKWISE))
+        except Exception:
+            pass
 
-		try:
-			sensor = ColorDistanceSensor(port)
-			sensor_port=port
-			sensor_type="ColorDistanceSensor"
-			print(port, ":", sensor_type)
-			continue
-		except OSError:
-			pass
+        try:
+            sensors.append(ColorDistanceSensor(p))
+        except Exception:
+            pass
 
-		print(port, ": Nothing found")
+    # Policy: first device wins
+    motor = motors[0] if motors else None
+    sensor = sensors[0] if sensors else None
+
+    # Cache motor max speed once (Motor only)
+    motor_max_speed = None
+    if motor is not None and hasattr(motor, "limits"):
+        try:
+            motor_max_speed, *_ = motor.limits()
+        except Exception:
+            motor_max_speed = None
+
 
 def detect_remote():
-	global remote
+    global remote
+    try:
+        remote = Remote()
+    except Exception:
+        remote = None
 
-	print("Waiting", remote_timeout, "ms for remote...")
-	remote = None
-	try:
-		remote=Remote(timeout=remote_timeout) # TODO: How to handle connecting the remote and timeouts??
-		print("Remote name is", remote.name)
-	except OSError:
-		print("Could not find the remote. Never mind, continue without it")
+# ============================================================================
+# Motor control
+# ============================================================================
 
-def detect_hub():
-	global hub
-	global hub_type
-
-	# Get the hardware type
-	print("Hub type", version)
-	hub_type, _, _ = version
-
-	if hub_type == "cityhub":
-		from pybricks.hubs       import CityHub
-		hub = CityHub()
-	elif hub_type == "technichub":
-		from pybricks.hubs       import TechnicHub
-		hub = TechnicHub()
-	elif hub_type == "movehub":
-		from pybricks.hubs       import MoveHub			# not tested
-		hub = MoveHub()
-	elif hub_type == "inventorhub":
-		from pybricks.hubs       import InventorHub		# not tested
-		hub = InventorHub()
-	elif hub_type == "primehub":
-		from pybricks.hubs       import PrimeHub
-		hub = PrimeHub()
-	elif hub_type == "essentialhub":
-		from pybricks.hubs       import EssentialHub	# not tested
-		hub = EssentialHub()
-	else:
-		print("No hub detected")
+def is_dc_motor(m):
+    return hasattr(m, "dc") and not hasattr(m, "run")
 
 
-# The program starts here
-print("Train Controller program")
+def stop_motor(stop_mode=Stop.BRAKE):
+    global current_percent
 
-detect_hub()
+    if motor is None:
+        return
+
+    try:
+        motor.stop(stop_mode)
+    except Exception:
+        try:
+            motor.stop()
+        except Exception:
+            try:
+                motor.dc(0)
+            except Exception:
+                pass
+
+    current_percent = 0
+
+
+def apply_percent(percent):
+    global current_percent
+
+    if motor is None:
+        return
+    if stopped_by_button or stopped_by_color:
+        return
+    if current_percent == percent:
+        return
+
+    if is_dc_motor(motor):
+        motor.dc(percent)
+    else:
+        max_speed = motor_max_speed if motor_max_speed is not None else 1000
+        motor.run(int(max_speed * percent / 100))
+
+    current_percent = percent
+
+# ============================================================================
+# UI / feedback
+# ============================================================================
+
+def all_lights(color):
+    try:
+        hub.light.on(color)
+    except Exception:
+        pass
+    if remote:
+        try:
+            remote.light.on(color)
+        except Exception:
+            pass
+
+
+def show_state():
+    if stopped_by_button:
+        all_lights(Color.ORANGE)
+    elif stopped_by_color:
+        all_lights(Color.RED)
+    else:
+        all_lights(Color.GREEN)
+
+# ============================================================================
+# State transitions
+# ============================================================================
+
+def toggle_run():
+    global stopped_by_button
+
+    if stopped_by_button:
+        stopped_by_button = False
+        apply_percent(requested_percent)
+    else:
+        stop_motor()
+        stopped_by_button = True
+
+    show_state()
+
+
+def update_speed(delta_percent):
+    global requested_percent
+
+    requested_percent += delta_percent
+    if requested_percent > MAX_PERCENT:
+        requested_percent = MAX_PERCENT
+    if requested_percent < -MAX_PERCENT:
+        requested_percent = -MAX_PERCENT
+
+    apply_percent(requested_percent)
+
+# ============================================================================
+# Input handling
+# ============================================================================
+
+def handle_remote():
+    if not remote:
+        return
+
+    pressed = remote.buttons.pressed()
+
+    if pressed == (Button.CENTER,):
+        toggle_run()
+        wait(250)
+
+    if Button.LEFT_PLUS in pressed:
+        update_speed(+SPEED_STEP_PERCENT)
+        wait(200)
+
+    if Button.LEFT_MINUS in pressed:
+        update_speed(-SPEED_STEP_PERCENT)
+        wait(200)
+
+
+def handle_hub_button():
+    global prev_hub_center_pressed, debounce_deadline_ms
+
+    pressed = Button.CENTER in hub.buttons.pressed()
+
+    if now_ms >= debounce_deadline_ms:
+        if pressed and not prev_hub_center_pressed:
+            toggle_run()
+            debounce_deadline_ms = now_ms + HUB_BUTTON_DEBOUNCE_MS
+
+    prev_hub_center_pressed = pressed
+
+
+def handle_sensor():
+    global stopped_by_color, red_count, nonred_count
+
+    if not sensor:
+        return
+
+    c = sensor.color()
+
+    if c == Color.RED:
+        red_count += 1
+        nonred_count = 0
+    else:
+        nonred_count += 1
+        red_count = 0
+
+    if not stopped_by_color and red_count >= RED_SAMPLES_TO_STOP:
+        stopped_by_color = True
+        stop_motor()
+        show_state()
+
+    if stopped_by_color and nonred_count >= NONRED_SAMPLES_TO_RESUME:
+        stopped_by_color = False
+        apply_percent(requested_percent)
+        show_state()
+
+# ============================================================================
+# Main
+# ============================================================================
+
 detect_peripherals()
 detect_remote()
+show_state()
 
-# The hub's center button usually stops the program
-# Override that so we can use it ourselves
-print("Claiming the hub stop button as our own")
-hub.system.set_stop_button(None)
-
-all_lights(hold_color)
-
-print("Entering the main loop")
 while True:
-	handle_sensor()
-	handle_buttons()
+    now_ms += LOOP_MS
+
+    handle_sensor()
+    handle_remote()
+    handle_hub_button()
+
+    wait(LOOP_MS)
+
