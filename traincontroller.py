@@ -175,6 +175,11 @@ def detect_peripherals():
 	# Start with the basic set of ports available on all hubs
 	if hub_type == "movehub":
 		# MoveHub doesn't like you scanning Port.A or B
+		motor=Motor(Port.A)
+		motor_type="Motor"
+		motor_port=Port.A
+		motor_max_speed=1500
+		motor_multiplier=15
 		ports = [Port.C, Port.D]
 	else:
 		ports = [Port.A, Port.B]
